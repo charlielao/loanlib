@@ -52,7 +52,7 @@ class DataLoader:
         static_dfs = []
         for df_name, df in self.data_frames.items():
             if self._data_frame_is_time_series(df):
-                time_series_dfs.append(self._melt_time_series(df, df_name))
+                time_series_dfs.append(self._melt_time_series(df, df_name.replace('DATA-', '')))
             else:
                 static_dfs.append(df)
         if len(static_dfs) != 1:
@@ -63,5 +63,5 @@ class DataLoader:
         index = pd.MultiIndex.from_product([static_df.index, dates], names=['ID', 'Date'])
         static_repeated = static_df.reindex(index, level=0).reset_index()
         df_final = pd.merge(ts_df_combined, static_repeated, on=['ID', 'Date'])
-        df_final = df_final.set_index(['ID', 'Date'])
+        df_final = df_final.set_index(['ID', 'Date'], drop=False)
         return df_final
