@@ -1,2 +1,2 @@
-from . import data_loader
-__all__ = [data_loader]
+from . import data_loader, data_manipulation
+__all__ = [data_loader, data_manipulation]
