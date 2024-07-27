@@ -21,6 +21,7 @@ also, for dependnecies, ideally would be able to trace the computational graph a
 future iterations
 '''
 
+
 def custom_feature(*column_names, **kwargs):
     def decorator(func):
         import inspect
@@ -48,8 +49,8 @@ def get_static_value(values):
 
 
 @custom_feature('Payment Made', 'original_balance')
-def current_balance(payment_made: np.array, original_balance: np.array):
-    return np.clip( original_balance - np.cumsum(payment_made), a_min=0.0, a_max=None)
+def current_balance(payments_made: np.array, balances: np.array):
+    return np.clip(balances - np.cumsum(payments_made), a_min=0.0, a_max=None)
 
 
 def diff_month(d1, d2):
