@@ -36,6 +36,8 @@ class MortgageCashflowModel:
         self.number_month_forecasted = len(self.boe_base_rate)
         self.forecast_months = np.arange(1, self.number_month_forecasted+1)
         self.verify_parameters()
+        self.df = self.run()
+
 
     def verify_parameters(self):
         if self.fixed_pre_reversion_rate < 0.0 or self.fixed_pre_reversion_rate > 1.0:
@@ -49,6 +51,27 @@ class MortgageCashflowModel:
 
         #if self.input_cpr.index != self.input_cdr.index:
         #    raise ValueError('CPR and CDR indices should match')
+
+    def run(self):
+        import inspect
+        df = {}
+        all_attributes = frozenset(dir(self))
+        relevant_attributes = []
+        for name in all_attributes:
+            attr = getattr(self, name)
+            new_attr_name = name[1:]
+            # needs better way to enforce ways to build rows, too brittle currently
+            if inspect.ismethod(attr) and 'forecast_month' in inspect.signature(attr).parameters \
+                    and 'jitted' not in name and name[0] == '_' and new_attr_name not in all_attributes:
+                relevant_attributes.append((attr, new_attr_name))
+
+        for forecast_month in self.forecast_months:
+            for attr, attr_name in relevant_attributes:
+                if attr_name not in df:
+                    df[attr_name] = np.zeros(len(self.forecast_months))
+                df[attr_name][forecast_month-1] = attr(forecast_month)
+
+        return pd.DataFrame(df)
 
     @classmethod
     def _operate_on_inputs(cls, func, *inputs) -> ArrayLike:
@@ -111,6 +134,8 @@ class MortgageCashflowModel:
     def _scheduled_payment(self, forecast_month: int) -> float:
         import numpy_financial as npf
         remaining_term = self._remaining_term(forecast_month)
+        if remaining_term == 0:
+            return 0.0
         balance = self._opening_balance(forecast_month)
         interest_rate = self._interest_rate(forecast_month)
         return npf.pmt(interest_rate/12.0, remaining_term, -balance, balance if self.repayment_method == _INTEREST_ONLY_LITERAL else 0.0)
