@@ -19,6 +19,8 @@ need to specify dependency, similar to custom_feature.py
 could potentially refactored out all codes, having to specify two functions (_func and _jitted_func) for one row is a bit
 ugly 
 the numba decorator probably doesn't need to cache
+
+For multiprocessing, alternatively can use Dask, which works well with the their own parallel data frames too
 '''
 
 
@@ -363,9 +365,6 @@ def run_single_simulation(loan_config_override: dict = {}):
 
 
 def run_simulations(loan_configs: List[Dict]=[{}]):
-    '''
-    Alternatively can use Dask, which works well with the data frames too
-    '''
     import os
     from multiprocessing import Pool
     with Pool(os.cpu_count()) as p:
