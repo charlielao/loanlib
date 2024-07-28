@@ -1,11 +1,18 @@
 import numpy as np
+from numpy.typing import ArrayLike
 import pandas as pd
-from functools import cached_property
+from functools import cached_property, lru_cache
 from loanlib.utils import shift_by_months, get_first_truth_value
+from numba import njit
 
 _INTEREST_ONLY_LITERAL = 'Interest Only'
 _REPAYMENT_METHODS = {_INTEREST_ONLY_LITERAL}
+'''
+using numba instead because numpy cannot support recusive relationship
+could potentailly use a context manager to avoid passing forecast_month everytime
 
+should use a dynamic programming table to build up the table, but determining the order is a bit involved
+'''
 #can do Similar sort of computational graph so everything only has to be evaluated once automatically, or alternatively caching
 #could potentially refactored out all the numpy computations in fact
 
@@ -40,131 +47,253 @@ class MortgageCashflowModel:
         if self.repayment_method not in _REPAYMENT_METHODS:
             raise NotImplementedError('Only interest only repayment method is supported')
 
-        if self.cpr.index != self.cdr.index:
-            raise ValueError('CPR and CDR indices should match')
+        #if self.input_cpr.index != self.input_cdr.index:
+        #    raise ValueError('CPR and CDR indices should match')
 
     @classmethod
-    def operate_on_inputs(cls, func, *inputs):
+    def _operate_on_inputs(cls, func, *inputs) -> ArrayLike:
         return np.apply_along_axis(func, 0, np.stack(inputs))
 
     @cached_property
-    def remaining_term(self):
-        return np.concatenate((np.arange(1, self.month_to_maturity+1)[::-1],
-                               np.zeros(self.number_month_forecasted-self.month_to_maturity)), axis=0)
-
-    @cached_property
-    def time_past_reversion(self):
+    def time_past_reversion(self) -> ArrayLike:
         return self.month_post_reversion + self.forecast_months
 
-    @cached_property
-    def opening_balance(self):
-        return shift_by_months(self.closing_balance)
+    @lru_cache()
+    def _time_past_reversion(self, forecast_month: int) -> int:
+        return self.time_past_reversion[forecast_month-1]
 
     @cached_property
-    def interest_rate(self):
-        def func(x): return x[1] + self.post_reversion_margin if x[0]>0 else self.fixed_pre_reversion_rate
-        return self.operate_on_inputs(func, self.time_past_reversion, self.boe_base_rate)
-
-
-    @cached_property
-    def scheduled_payment(self):
-        import numpy_financial as npf
-        def func(x): return npf.pmt(x[2]/12.0, x[0], -x[1], x[1] if self.repayment_method == _INTEREST_ONLY_LITERAL else 0.0)
-        return self.operate_on_inputs(func, self.remaining_term, self.opening_balance, self.interest_rate)
-
-
-    @cached_property
-    def scheduled_interest(self):
-        return self.operate_on_inputs(lambda x: x[1] * (1.0/12) * x[1], self.opening_balance, self.interest_rate)
-
-    @cached_property
-    def scheduled_principal(self):
-        return self.operate_on_inputs(lambda x: x[0] - x[1], self.scheduled_payment, self.scheduled_interest)
-
-    @cached_property
-    def principal_balloon(self):
-        def func(x): return x[1] if x[0] == 1 and self.repayment_method == _INTEREST_ONLY_LITERAL else 0.0
-        return self.operate_on_inputs(func, self.remaining_term, self.opening_balance)
-
-    @cached_property
-    def closing_balance(self):
-        return self.operate_on_inputs(lambda x: x[0]-x[1]-x[2], self.opening_balance, self.scheduled_principal, self.principal_balloon)
-
-    @cached_property
-    def expected_opening_performing_balance(self):
-        return self.operate_on_inputs(lambda x: x[1] if x[0] == 1 else x[2],self.forecast_months, self.opening_balance,
-                                                        shift_by_months(self.expected_closing_performing_balance))
-
-    @cached_property
-    def cdr(self):
-        return np.apply_along_axis(lambda x: self.input_cdr.loc[x], 0, self.time_past_reversion)
-
-
-    @cached_property
-    def defaults(self):
-        return self.operate_on_inputs(lambda x: (1-(1-x[1])**(1.0/12))*x[0], self.expected_opening_performing_balance, self.cdr)
-
-    @cached_property
-    def expected_balance_post_period_defaults(self):
-        return self.operate_on_inputs(lambda x: x[0]-x[1], self.expected_opening_performing_balance, self.defaults)
-
-    @cached_property
-    def survival_percentage_post_default(self):
-        return self.operate_on_inputs(lambda x: x[1]/x[0] if x[0] else 0.0,self.opening_balance, self.expected_balance_post_period_defaults)
-
-    @cached_property
-    def expected_scheduled_payment(self):
-        return self.operate_on_inputs(lambda x: x[1]*x[0], self.survival_percentage_post_default, self.scheduled_payment)
-
-    @cached_property
-    def expected_interest(self):
-        return self.operate_on_inputs(lambda x: x[1]*x[0], self.survival_percentage_post_default, self.scheduled_interest)
-
-    @cached_property
-    def expected_principal_schedule(self):
-        return self.operate_on_inputs(lambda x: (x[1]+x[2])*x[0],
-                                      self.survival_percentage_post_default, self.scheduled_principal, self.principal_balloon)
-
-
-    @cached_property
-    def expected_balance_pre_period_prepays(self):
-        return self.operate_on_inputs(lambda x: x[0]-x[1], self.expected_balance_post_period_defaults, self.expected_principal_schedule)
-
-    @cached_property
-    def cpr(self):
+    def cpr(self) -> ArrayLike:
         return np.apply_along_axis(lambda x: self.input_cpr.loc[x], 0, self.time_past_reversion)
 
-    @cached_property
-    def expected_prepayments(self):
-        return self.operate_on_inputs(lambda x: (1-(1-x[0])**(1.0/12))*x[1], self.cpr, self.expected_balance_pre_period_prepays)
+    @lru_cache()
+    def _cpr(self, forecast_month: int) -> float:
+        return self.cpr[forecast_month-1]
 
     @cached_property
-    def expected_closing_performing_balance(self):
-        return self.operate_on_inputs(lambda x: x[0]-x[1], self.expected_balance_pre_period_prepays, self.expected_prepayments)
+    def cdr(self) -> ArrayLike:
+        return np.apply_along_axis(lambda x: self.input_cdr.loc[x], 0, self.time_past_reversion)
 
-    @cached_property
-    def end_of_period_survival(self):
-        return self.operate_on_inputs(lambda x: x[0]/x[1] if x[1] else 0.0,self.expected_closing_performing_balance, self.closing_balance)
+    @lru_cache()
+    def _cdr(self, forecast_month: int) -> float:
+        return self.cdr[forecast_month-1]
 
-    @cached_property
-    def expected_opening_default_balance(self):
-        return self.operate_on_inputs(lambda x: 0.0 if x[0] == 1 else x[1], self.forecast_months, shift_by_months(self.expected_closing_default_balance))
+    @lru_cache()
+    def _remaining_term(self, forecast_month: int) -> int:
+        return self._jitted_remaining_term(forecast_month, self.month_to_maturity)
 
-    @cached_property
-    def expected_new_defaults(self):
-        return self.defaults
+    @staticmethod
+    @njit(cache=True)
+    def _jitted_remaining_term( forecast_month: int, month_to_maturity: int) -> int:
+        return 0.0 if forecast_month > month_to_maturity else (month_to_maturity-forecast_month+1)
 
-    @cached_property
-    def expected_recoveries(self):
-        def func(x): return 0.0 if x[1] <= self.recovery_lag else (1-self.ls) * x[0]
-        return self.operate_on_inputs(func, shift_by_months( self.expected_new_defaults, self.recovery_lag), self.forecast_months)
+    @lru_cache()
+    def _opening_balance(self, forecast_month: int) -> float:
+        return self.current_balance if forecast_month == 0 else self._jitted_opening_balance(self._closing_balance(forecast_month-1))
 
-    @cached_property
-    def expected_loss(self):
-        def func(x): return 0.0 if x[1] <= self.recovery_lag else self.ls * x[0]
-        return self.operate_on_inputs(func, shift_by_months( self.expected_new_defaults, self.recovery_lag), self.forecast_months)
+    @staticmethod
+    @njit(cache=True)
+    def _jitted_opening_balance(closing_balance: float) -> float:
+        return closing_balance
 
-    @cached_property
-    def expected_closing_default_balance(self):
-        return self.operate_on_inputs(lambda x: x[0]-x[2]-x[3]+x[1],
-            self.expected_opening_default_balance, self.expected_new_defaults, self.expected_recoveries, self.expected_loss)
+    @lru_cache()
+    def _interest_rate(self, forecast_month: int) -> float:
+        return self._jitted_interest_rate(self.boe_base_rate[forecast_month-1], self.post_reversion_margin,
+                                          self._time_past_reversion(forecast_month), self.fixed_pre_reversion_rate)
+
+    @staticmethod
+    @njit(cache=True)
+    def _jitted_interest_rate(boe_base_rate: float, post_reversion_margin: float, time_past_reversion: int, fixed_pre_reversion_rate: float) -> float:
+        return boe_base_rate + post_reversion_margin if time_past_reversion > 0 else fixed_pre_reversion_rate
+
+    #cannot be jitted due to pmt
+    @lru_cache()
+    def _scheduled_payment(self, forecast_month: int) -> float:
+        import numpy_financial as npf
+        remaining_term = self._remaining_term(forecast_month)
+        balance = self._opening_balance(forecast_month)
+        interest_rate = self._interest_rate(forecast_month)
+        return npf.pmt(interest_rate/12.0, remaining_term, -balance, balance if self.repayment_method == _INTEREST_ONLY_LITERAL else 0.0)
+
+    @lru_cache()
+    def _scheduled_interest(self, forecast_month: int) -> float:
+        return self._jitted_scheduled_interest(self._interest_rate(forecast_month), self._opening_balance(forecast_month))
+
+    @staticmethod
+    @njit(cache=True)
+    def _jitted_scheduled_interest(interest_rate: float, opening_balance: float) -> float:
+        return interest_rate * (1.0 / 12) * opening_balance
+
+    @lru_cache()
+    def _scheduled_principal(self, forecast_month: int) -> float:
+        return self._jitted_scheduled_principal(self._scheduled_payment(forecast_month), self._scheduled_interest(forecast_month))
+
+    @staticmethod
+    @njit(cache=True)
+    def _jitted_scheduled_principal(scheduled_payment: float, scheduled_interest: float) -> float:
+        return scheduled_payment - scheduled_interest
+
+    @lru_cache()
+    def _principal_balloon(self, forecast_month: int) -> float:
+        return self._jitted_principal_balloon(self._opening_balance(forecast_month), self._remaining_term(forecast_month), self.repayment_method)
+
+    @staticmethod
+    @njit(cache=True)
+    def _jitted_principal_balloon(opening_balance: float, remaining_term: int, repayment_method: str) -> float:
+        return opening_balance if (remaining_term == 1 and repayment_method == _INTEREST_ONLY_LITERAL) else 0.0
+
+    @lru_cache()
+    def _closing_balance(self, forecast_month: int):
+        return self._jitted_closing_balance(self._opening_balance(forecast_month), self._scheduled_principal(forecast_month), self._principal_balloon(forecast_month))
+
+    @staticmethod
+    @njit(cache=True)
+    def _jitted_closing_balance(opening_balance: float, scheduled_principal: float, principal_balloon: float) -> float:
+        return opening_balance-scheduled_principal-principal_balloon
+
+    @lru_cache()
+    def _expected_opening_performing_balance(self, forecast_month: int) -> float:
+        return self._opening_balance(forecast_month) if forecast_month == 1 else self._jitted_expected_opening_performing_balance(self._expected_closing_performing_balance(forecast_month-1))
+
+    @staticmethod
+    @njit(cache=True)
+    def _jitted_expected_opening_performing_balance(expected_closing_performing_balance: float) -> float:
+        return expected_closing_performing_balance
+
+    @lru_cache()
+    def _defaults(self, forecast_month: int) -> float:
+        return self._jitted_defaults(self._cdr(forecast_month), self._expected_opening_performing_balance(forecast_month))
+
+    @staticmethod
+    @njit(cache=True)
+    def _jitted_defaults(cdr: float, expected_opening_performing_balance: float) -> float:
+        return (1 - (1 - cdr) ** (1.0 / 12)) * expected_opening_performing_balance
+
+    @lru_cache()
+    def _expected_balance_post_period_defaults(self, forecast_month: int) -> float:
+        return self._jitted_expected_balance_post_period_defaults(self._expected_opening_performing_balance(forecast_month), self._defaults(forecast_month))
+
+    @staticmethod
+    @njit(cache=True)
+    def _jitted_expected_balance_post_period_defaults(expected_opening_performing_balance: float, defaults: float) -> float:
+        return expected_opening_performing_balance - defaults
+
+    @lru_cache()
+    def _survival_percentage_post_default(self, forecast_month: int) -> float:
+        return self._jitted_survival_percentage_post_default(self._opening_balance(forecast_month), self._expected_balance_post_period_defaults(forecast_month))
+
+    @staticmethod
+    @njit(cache=True)
+    def _jitted_survival_percentage_post_default(balance: float, expected_balance_post_period_defaults: float) -> float:
+        return (expected_balance_post_period_defaults / balance) if balance else 0.0
+
+    @lru_cache()
+    def _expected_scheduled_payment(self, forecast_month: int) -> float:
+        return self._jitted_expected_scheduled_payment(self._survival_percentage_post_default(forecast_month), self._scheduled_payment(forecast_month))
+
+    @staticmethod
+    @njit(cache=True)
+    def _jitted_expected_scheduled_payment(survival_percentage_post_default: float, scheduled_payment: float) -> float:
+        return survival_percentage_post_default * scheduled_payment
+
+    @lru_cache()
+    def _expected_interest(self, forecast_month: int) -> float:
+        return self._jitted_expected_interest(self._survival_percentage_post_default(forecast_month), self._scheduled_interest(forecast_month))
+
+    @staticmethod
+    @njit(cache=True)
+    def _jitted_expected_interest(survival_percentage_post_default: float, scheduled_interest: float) -> float:
+        return survival_percentage_post_default * scheduled_interest
+
+    @lru_cache()
+    def _expected_principal_schedule(self, forecast_month: int) -> float:
+        return self._jitted_expected_principal_schedule(self._scheduled_principal(forecast_month), self._principal_balloon(forecast_month), self._survival_percentage_post_default(forecast_month))
+
+    @staticmethod
+    @njit(cache=True)
+    def _jitted_expected_principal_schedule(scheduled_principal: float, principal_balloon: float, survival_percentage_post_default: float) -> float:
+        return (scheduled_principal + principal_balloon) * survival_percentage_post_default
+
+    @lru_cache()
+    def _expected_balance_pre_period_prepays(self, forecast_month: int) -> float:
+        return self._jitted_expected_balance_pre_period_prepays(self._expected_balance_post_period_defaults(forecast_month), self._expected_principal_schedule(forecast_month))
+
+    @staticmethod
+    @njit(cache=True)
+    def _jitted_expected_balance_pre_period_prepays(expected_balance_post_period_defaults: float, expected_principal_schedule: float) -> float:
+        return expected_balance_post_period_defaults - expected_principal_schedule
+
+    @lru_cache()
+    def _expected_prepayments(self, forecast_month: int) -> float:
+        return self._jitted_expected_prepayments(self._cpr(forecast_month), self._expected_balance_pre_period_prepays(forecast_month))
+
+    @staticmethod
+    @njit(cache=True)
+    def _jitted_expected_prepayments(cpr: float, expected_balance_pre_period_prepays: float) -> float:
+        return (1 - (1 - cpr) ** (1.0 / 12)) * expected_balance_pre_period_prepays
+
+    @lru_cache()
+    def _expected_closing_performing_balance(self, forecast_month: int) -> float:
+        return self._jitted_expected_closing_performing_balance(self._expected_balance_pre_period_prepays(forecast_month), self._expected_prepayments(forecast_month))
+
+    @staticmethod
+    @njit(cache=True)
+    def _jitted_expected_closing_performing_balance(expected_balance_pre_period_prepays: float, expected_prepayments: float) -> float:
+        return expected_balance_pre_period_prepays - expected_prepayments
+
+    @lru_cache()
+    def _end_of_period_survival(self, forecast_month: int) -> float:
+        return self._jitted_end_of_period_survival(self._closing_balance(forecast_month), self._expected_closing_performing_balance(forecast_month))
+
+    @staticmethod
+    @njit(cache=True)
+    def _jitted_end_of_period_survival(closing_balance: float, expected_closing_performing_balance: float) -> float:
+        return expected_closing_performing_balance / closing_balance if closing_balance else 0.0
+
+    @lru_cache()
+    def _expected_opening_default_balance(self, forecast_month: int) -> float:
+        return 0.0 if forecast_month == 1 else self._jitted_expected_opening_default_balance(self._expected_closing_default_balance(forecast_month-1))
+
+    @staticmethod
+    @njit(cache=True)
+    def _jitted_expected_opening_default_balance(expected_closing_default_balance: float) -> float:
+        return expected_closing_default_balance
+
+    @lru_cache()
+    def _expected_new_defaults(self, forecast_month: int) -> float:
+        return self._jitted_expected_new_defaults(self._defaults(forecast_month))
+
+    @staticmethod
+    @njit(cache=True)
+    def _jitted_expected_new_defaults(defaults: float) -> float:
+        return defaults
+
+    @lru_cache()
+    def _expected_recoveries(self, forecast_month: int) -> float:
+        return 0.0 if forecast_month <= self.recovery_lag else self._jitted_expected_recoveries(self.ls, self._expected_new_defaults(forecast_month-self.recovery_lag))
+
+    @staticmethod
+    @njit(cache=True)
+    def _jitted_expected_recoveries(ls: float, expected_new_defaults: float) -> float:
+        return  (1-ls) * expected_new_defaults
+
+    @lru_cache()
+    def _expected_loss(self, forecast_month: int) -> float:
+        return 0.0 if forecast_month <= self.recovery_lag else self._jitted_expected_loss(self.ls, self._expected_new_defaults(forecast_month-self.recovery_lag))
+
+    @staticmethod
+    @njit(cache=True)
+    def _jitted_expected_loss(ls: float, expected_new_defaults: float) -> float:
+        return ls * expected_new_defaults
+
+    @lru_cache()
+    def _expected_closing_default_balance(self, forecast_month: int) -> float:
+        return self._jitted_expected_closing_default_balance(self._expected_opening_default_balance(forecast_month),
+                                                             self._expected_new_defaults(forecast_month),
+                                                             self._expected_recoveries(forecast_month),
+                                                             self._expected_loss(forecast_month))
+
+    @staticmethod
+    @njit(cache=True)
+    def _jitted_expected_closing_default_balance(expected_opening_default_balance: float, expected_new_defaults: float, expected_recoveries: float, expected_loss: float) -> float:
+        return expected_opening_default_balance + expected_new_defaults - expected_recoveries - expected_loss

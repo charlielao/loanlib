@@ -15,7 +15,7 @@ There are three modes of creating your own features:
 3. lastly if it is less numerical and require objects such as datetime, then the above don't work really well so you can 
 pass in the entire dataframe and compute as normal
 
-The first two ways are more recommended as in theory they should be faster but needs more testing
+The first two ways are more recommended as in theory they should be faster but needs more testing to confirm
 
 The first two ways require you specify the column names of the input features in the same order of the arguments so the 
 decorator will transform the dataframe input into numpy arrays as numba is not fast on pure pandas objects 
@@ -25,7 +25,7 @@ and the computational graph will automatically be traced and computed in the cor
 
 for future iteration, there should be something that intercept the call and construct the computational graph automatically
 without user specifying the dependencies explicitly; also possbily don't need to specify both in arguments and in the decorator
-but infered from the function signature 
+but inferred from the function signature 
 
 '''
 
