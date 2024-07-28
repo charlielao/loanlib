@@ -60,6 +60,8 @@ def current_balance(payments_made: ArrayLike, balances: ArrayLike) -> ArrayLike:
 
 
 def diff_month(d1, d2):
+    if pd.isna(d1) or pd.isna(d2):
+        return np.nan
     return (d1.year - d2.year) * 12 + d1.month - d2.month
 
 
@@ -239,7 +241,7 @@ def year_of_default(df: pd.DataFrame) -> pd.DataFrame:
     '''
     the year defaults happend
     '''
-    return df['date_of_default'].apply(lambda x: x.year)
+    return df['date_of_default'].apply(lambda x: np.nan if pd.isna(x) else x.year)
 
 
 @custom_feature('date_of_default', 'default_in_month', 'Payment Made', 'Payment Due')

@@ -12,5 +12,23 @@ def example_portfolio():
     return pd.DataFrame()
 
 
-def test_year_of_default():
-    custom_feature.year_of_default()
+def small_portfolio():
+    SOURCE_FILE_PATH = '../../data/2024 - Strat Casestudy.xlsx'
+    from loanlib.data_handler import DataLoader, create_features
+    import random
+    random.seed(10)
+    loader = DataLoader(SOURCE_FILE_PATH)
+    df = loader.combined_data_frame
+    all_loans = set(index[0] for index in df.index)
+    random_set = random.sample(list(all_loans),10)
+    return create_features(df[df.index.get_level_values('ID').isin(random_set)])
+
+
+class TestCustomeFeatures:
+
+    @pytest.fixture(autouse=True)
+    def _get_data(self):
+        self._df = small_portfolio()
+
+    def test_year_of_default(self):
+        assert len(self._df[ 'year_of_default' ]) > 0

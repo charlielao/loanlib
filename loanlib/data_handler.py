@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 import datetime
 from typing import List
 
@@ -82,7 +83,8 @@ def create_features(df: pd.DataFrame, skipped_features: List[str] = []):
         if func_name not in skipped_features:
             func = function_name_map[func_name]
             has_dependencies = len( register[func_name] ) > 0
-            df[func_name] = pd.Series(df.groupby(level=['ID']).apply(func).values.flatten()
+            #needs to properly handle np.nan vs None in the future
+            df[func_name] = pd.Series(df.groupby(level=['ID']).apply(func).replace({None:np.nan}).values.flatten()
                                       if has_dependencies else func(df)).values
     df.drop(columns=df.index.names, inplace=True)
     return df
