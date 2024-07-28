@@ -1,5 +1,12 @@
+**loanlib** is a library aimed to help analysts analyse a 
+portfolio of loans. It provides simple APIs to load data, construct
+features, construct various loan metrics and run cashflow model simulations in a notebook.
+Extending features and increasing complexity should 
+also be quite straightforward the way iterative operation is defined very similarly to Excel.
+
+for examples, please read below and check the notebook folder
+
 the library contains several pieces:
-for examples, please check the notebook folder
 
 1. data_handler.py that loads data and automatically constructs features from custom_feature.py (in a new copy)
 ```

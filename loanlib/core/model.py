@@ -9,13 +9,14 @@ _INTEREST_ONLY_LITERAL = 'Interest Only'
 _REPAYMENT_METHODS = {_INTEREST_ONLY_LITERAL}
 '''
 for how to extend the model, see README.md
-!!!warning: for accessing past values from another column, the condition e.g. forecast_month == 1 needs to be specificed
-in _new_row function intead of the _jitted_new_row function, as it causes infinite recursion error, this needs to be 
-handled more gracefully
+!!!warning: for accessing past values from another column, the condition e.g. forecast_month == 1 needs to be specified
+in _new_row function instead of the _jitted_new_row function, as it causes infinite recursion error, this needs to be 
+handled better
 
 should use a dynamic programming table to build up the table, but determining the order is a bit involved needs topology sort
 need to specify dependency, similar to custom_feature.py
-could potentially refactored out all codes, having to specify two functions for one row is not ideal
+could potentially refactored out all codes, having to specify two functions (_func and _jitted_func) for one row is a bit
+ugly 
 the numba decorator probably doesn't need to cache
 '''
 
