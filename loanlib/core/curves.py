@@ -35,8 +35,8 @@ class CurveBuilder:
     def _generate_base_metric(cls, metric_name: str, df: pd.DataFrame, index: str, pivots: List[str]):
         transformed_df = df.reset_index().set_index([index])
         if not pivots:
-            resulting_df = transformed_df.groupby(index, as_index=False)[metric_name].sum()
-            resulting_df.index.name = index
+            resulting_df = transformed_df.groupby(index)[metric_name].sum().reset_index()
+            resulting_df.set_index(index, inplace=True)
             return resulting_df
         else:
             return pd.pivot_table(transformed_df, values=metric_name, index=index, columns=pivots, aggfunc='sum')

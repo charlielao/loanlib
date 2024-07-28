@@ -273,8 +273,9 @@ def outstanding_balance(default_amounts: ArrayLike, balances: ArrayLike, payment
     return results
 
 
-@custom_feature('prepaid_in_month', 'Payment Made', 'Payment Due', 'outstanding_balance')
-def smm(prepaid_month: ArrayLike, payments_made: ArrayLike, payments_due: ArrayLike, balances: ArrayLike) -> ArrayLike:
+@custom_feature('prepaid_in_month', 'Payment Made', 'Payment Due', 'outstanding_balance', 'effective_interest_rate')
+def smm(prepaid_month: ArrayLike, payments_made: ArrayLike, payments_due: ArrayLike,
+            balances: ArrayLike, effective_interest_rate: ArrayLike) -> ArrayLike:
     '''
     the single monthly mortality rate
     :param prepaid_month:
@@ -285,7 +286,7 @@ def smm(prepaid_month: ArrayLike, payments_made: ArrayLike, payments_due: ArrayL
     '''
     if np.isnan(prepaid_month).any():
         return fill_static(0.0, len(prepaid_month), False)
-    return (payments_made - payments_due) / balances
+    return np.divide( (payments_made - payments_due) / (1 + effective_interest_rate ), balances, where=(abs(balances)>1e-3))
 
 
 @custom_feature('date_of_default', 'Payment Made', 'Payment Due', 'outstanding_balance')
@@ -300,7 +301,7 @@ def mdr(default_date: ArrayLike, payments_made: ArrayLike, payments_due: ArrayLi
     '''
     if np.isnan(default_date).any():
         return fill_static(0.0, len(default_date), False)
-    return (payments_due - payments_made) / balances
+    return np.divide( (payments_due - payments_made) , balances, where=(abs(balances) >1e-3))
 
 
 @custom_feature('recovery_percent')
@@ -311,3 +312,15 @@ def recovery(recover_percent: ArrayLike) -> ArrayLike:
     :return:
     '''
     return recover_percent
+
+
+@custom_feature('time_to_reversion', 'pre_reversion_fixed_rate', 'post_reversion_boe_margin')
+def effective_interest_rate(time_to_reversion: ArrayLike, pre_reversion_rate: ArrayLike, post_reversion_margin: ArrayLike) -> ArrayLike:
+    '''
+    the effective interest rate
+    :param time_to_reversion:
+    :param pre_reversion_rate:
+    :param post_reversion_margin:
+    :return:
+    '''
+    return np.where(time_to_reversion < 0, pre_reversion_rate, pre_reversion_rate + post_reversion_margin)

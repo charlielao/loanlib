@@ -8,8 +8,8 @@ from numba import njit
 _INTEREST_ONLY_LITERAL = 'Interest Only'
 _REPAYMENT_METHODS = {_INTEREST_ONLY_LITERAL}
 '''
-using numba instead because numpy cannot support recusive relationship
-could potentailly use a context manager to avoid passing forecast_month everytime
+using numba instead because numpy cannot support recursive relationship
+could potentially use a context manager to avoid passing forecast_month everytime
 
 should use a dynamic programming table to build up the table, but determining the order is a bit involved
 '''
@@ -351,6 +351,9 @@ def run_single_simulation(config_override: dict = {}):
 
 
 def run_simulations(configs: List[Dict]=[{}]):
+    '''
+    Alternatively can use Dask, which works well with the data frames too
+    '''
     import os
     from multiprocessing import Pool
     with Pool(os.cpu_count()) as p:
