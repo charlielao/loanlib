@@ -3,7 +3,10 @@ from typing import Tuple, List, Callable
 
 
 class CurveBuilder:
-    def __init__(self, df: pd.DataFrame, index: str = 'seasoning', pivots: List[str] = ()):
+    def __init__(self, df: pd.DataFrame|str, index: str = 'seasoning', pivots: List[str] = ()):
+        if isinstance(df, str):
+            from loanlib.data_handler import DataLoader, create_features
+            df = create_features(DataLoader(df).combined_data_frame)
         self.df = df
         self.index = index
         self.pivots = pivots

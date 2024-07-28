@@ -69,7 +69,7 @@ class DataLoader:
         return df_final
 
 
-def augment_data_frame(df: pd.DataFrame, skipped_features: List[str] = []):
+def create_features(df: pd.DataFrame, skipped_features: List[str] = []):
     from loanlib.core import custom_feature
     from graphlib import TopologicalSorter
     import inspect

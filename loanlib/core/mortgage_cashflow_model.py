@@ -1,8 +1,8 @@
 import numpy as np
-from numpy.typing import ArrayLike
 import pandas as pd
+from numpy.typing import ArrayLike
 from functools import cached_property, lru_cache
-from loanlib.utils import shift_by_months, get_first_truth_value
+from typing import List, Dict
 from numba import njit
 
 _INTEREST_ONLY_LITERAL = 'Interest Only'
@@ -20,7 +20,7 @@ class MortgageCashflowModel:
 
     def __init__(self, month_post_reversion: int, seasoning: int, current_balance : float, fixed_pre_reversion_rate: float,
                     post_reversion_margin: float, month_to_maturity: int, repayment_method: str, ls: float, recovery_lag: int,
-                    cpr: pd.Series, cdr: pd.Series, boe_base_rate: np.array):
+                    cpr: pd.Series | float, cdr: pd.Series | float, boe_base_rate: np.array):
         self.month_post_reversion = month_post_reversion
         self.seasoning = seasoning
         self.current_balance = current_balance
@@ -31,8 +31,8 @@ class MortgageCashflowModel:
         self.ls = ls
         self.recovery_lag = recovery_lag
         self.boe_base_rate = boe_base_rate
-        self.input_cpr = cpr
-        self.input_cdr = cdr
+        self.input_cpr = cpr if isinstance(cpr, pd.Series) else pd.DataFrame({'cpr': [cpr]*205, 'month_post_reversion': range(-24, 181)}).set_index('month_post_reversion')['cpr']
+        self.input_cdr = cdr if isinstance(cdr, pd.Series) else pd.DataFrame({'cdr': [cdr]*205, 'month_post_reversion': range(-24, 181)}).set_index('month_post_reversion')['cdr']
         self.number_month_forecasted = len(self.boe_base_rate)
         self.forecast_months = np.arange(1, self.number_month_forecasted+1)
         self.verify_parameters()
@@ -322,3 +322,44 @@ class MortgageCashflowModel:
     @njit(cache=True)
     def _jitted_expected_closing_default_balance(expected_opening_default_balance: float, expected_new_defaults: float, expected_recoveries: float, expected_loss: float) -> float:
         return expected_opening_default_balance + expected_new_defaults - expected_recoveries - expected_loss
+
+
+BASE_CONFIG = {
+    'month_post_reversion': -22,
+    'seasoning': 2,
+    'current_balance': 100_000,
+    'fixed_pre_reversion_rate': 3.94/100.0,
+    'post_reversion_margin': 4.94/100.0,
+    'month_to_maturity': 178,
+    'repayment_method': 'Interest Only',
+    'ls': 0.2,
+    'recovery_lag': 6,
+    'cpr': pd.DataFrame({'cpr': [0.02]*205, 'month_post_reversion': range(-24, 181)}).set_index('month_post_reversion')['cpr'],
+    'cdr': pd.DataFrame({'cdr': [0.02]*205, 'month_post_reversion': range(-24, 181)}).set_index('month_post_reversion')['cdr'],
+    'boe_base_rate': np.array([4.5/100.0]*200)
+}
+
+
+def run_single_simulation(config_override: dict = {}):
+    configuration = {**BASE_CONFIG, **config_override}
+    try:
+        model = MortgageCashflowModel(**configuration)
+        model.run()
+        return model.df
+    except Exception as e:
+        return e
+
+
+def run_simulations(configs: List[Dict]=[{}]):
+    import os
+    from multiprocessing import Pool
+    with Pool(os.cpu_count()) as p:
+        results = (p.map(run_single_simulation, configs))
+    return results
+
+
+if __name__ == '__main__':
+    import time
+    starting_time = time.time()
+    run_simulations([{}] * int(1e4))
+    print(time.time() - starting_time)
