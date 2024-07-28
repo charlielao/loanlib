@@ -29,17 +29,17 @@ class CurveBuilder:
 
     def plot(self, curve_type: str):
         import matplotlib.pyplot as plt
-        return plt.plot(self.curve(curve_type))
+        return plt.plot(self.curve(curve_type)[curve_type.lower()])
 
     @classmethod
     def _generate_base_metric(cls, metric_name: str, df: pd.DataFrame, index: str, pivots: List[str]):
         transformed_df = df.reset_index().set_index([index])
         if not pivots:
-            resulting_df = transformed_df.groupby(index)[metric_name].sum().reset_index()
+            resulting_df = transformed_df.groupby(index)[metric_name].mean().reset_index()
             resulting_df.set_index(index, inplace=True)
             return resulting_df
         else:
-            return pd.pivot_table(transformed_df, values=metric_name, index=index, columns=pivots, aggfunc='sum')
+            return pd.pivot_table(transformed_df, values=metric_name, index=index, columns=pivots, aggfunc='mean')
 
     @classmethod
     def smm(cls, df: pd.DataFrame, index: str, pivots: List[str]):
@@ -65,10 +65,10 @@ class CurveBuilder:
     @classmethod
     def cdr(cls, df: pd.DataFrame, index: str, pivots: List[str]):
         cdr = cls.mdr(df, index, pivots)
-        if not pivots:
+        if pivots:
             return cdr.apply(CurveBuilder.annualize)
         else:
-            cdr['cpr'] = cdr['mdr'].apply(CurveBuilder.annualize)
+            cdr['cdr'] = cdr['mdr'].apply(CurveBuilder.annualize)
             return cdr
 
     @classmethod
