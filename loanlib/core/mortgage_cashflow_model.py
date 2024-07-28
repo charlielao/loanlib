@@ -20,7 +20,7 @@ class MortgageCashflowModel:
 
     def __init__(self, month_post_reversion: int, seasoning: int, current_balance : float, fixed_pre_reversion_rate: float,
                     post_reversion_margin: float, month_to_maturity: int, repayment_method: str, ls: float, recovery_lag: int,
-                    cpr: pd.Series | float, cdr: pd.Series | float, boe_base_rate: np.array):
+                    cpr: pd.DataFrame | float, cdr: pd.DataFrame | float, boe_base_rate: np.array):
         self.month_post_reversion = month_post_reversion
         self.seasoning = seasoning
         self.current_balance = current_balance
@@ -31,8 +31,8 @@ class MortgageCashflowModel:
         self.ls = ls
         self.recovery_lag = recovery_lag
         self.boe_base_rate = boe_base_rate
-        self.input_cpr = cpr if isinstance(cpr, pd.Series) else pd.DataFrame({'cpr': [cpr]*205, 'month_post_reversion': range(-24, 181)}).set_index('month_post_reversion')['cpr']
-        self.input_cdr = cdr if isinstance(cdr, pd.Series) else pd.DataFrame({'cdr': [cdr]*205, 'month_post_reversion': range(-24, 181)}).set_index('month_post_reversion')['cdr']
+        self.input_cpr = cpr if isinstance(cpr, pd.Series) else cpr['cpr'] if isinstance(cpr, pd.DataFrame) else pd.DataFrame({'cpr': [cpr]*205, 'month_post_reversion': range(-24, 181)}).set_index('month_post_reversion')['cpr']
+        self.input_cdr = cdr if isinstance(cdr, pd.Series) else cdr['cdr'] if isinstance(cdr, pd.DataFrame) else pd.DataFrame({'cdr': [cdr]*205, 'month_post_reversion': range(-24, 181)}).set_index('month_post_reversion')['cdr']
         self.number_month_forecasted = len(self.boe_base_rate)
         self.forecast_months = np.arange(1, self.number_month_forecasted+1)
         self.verify_parameters()
@@ -85,9 +85,15 @@ class MortgageCashflowModel:
     def _time_past_reversion(self, forecast_month: int) -> int:
         return self.time_past_reversion[forecast_month-1]
 
+    @classmethod
+    def lookup_value(self, index, df, col: str):
+        # Reindexing the DataFrame to handle missing indices
+        reindexed_df = df.reindex(index, fill_value=np.nan)
+        return reindexed_df.values
+
     @cached_property
     def cpr(self) -> ArrayLike:
-        return np.apply_along_axis(lambda x: self.input_cpr.loc[x], 0, self.time_past_reversion)
+        return np.apply_along_axis(lambda x: self.lookup_value(x, self.input_cpr, 'cpr'), 0, self.time_past_reversion)
 
     @lru_cache()
     def _cpr(self, forecast_month: int) -> float:
@@ -95,7 +101,7 @@ class MortgageCashflowModel:
 
     @cached_property
     def cdr(self) -> ArrayLike:
-        return np.apply_along_axis(lambda x: self.input_cdr.loc[x], 0, self.time_past_reversion)
+        return np.apply_along_axis(lambda x: self.lookup_value(x, self.input_cdr, 'cdr'), 0, self.time_past_reversion)
 
     @lru_cache()
     def _cdr(self, forecast_month: int) -> float:
@@ -324,7 +330,7 @@ class MortgageCashflowModel:
         return expected_opening_default_balance + expected_new_defaults - expected_recoveries - expected_loss
 
 
-BASE_CONFIG = {
+BASE_LOAN_CONFIG = {
     'month_post_reversion': -22,
     'seasoning': 2,
     'current_balance': 100_000,
@@ -340,24 +346,24 @@ BASE_CONFIG = {
 }
 
 
-def run_single_simulation(config_override: dict = {}):
-    configuration = {**BASE_CONFIG, **config_override}
+def run_single_simulation(loan_config_override: dict = {}):
+    configuration = {**BASE_LOAN_CONFIG, **loan_config_override}
     try:
         model = MortgageCashflowModel(**configuration)
         model.run()
         return model.df
     except Exception as e:
-        return e
+        return f'Error encountered when running simulation with config {loan_config_override}: {e}'
 
 
-def run_simulations(configs: List[Dict]=[{}]):
+def run_simulations(loan_configs: List[Dict]=[{}]):
     '''
     Alternatively can use Dask, which works well with the data frames too
     '''
     import os
     from multiprocessing import Pool
     with Pool(os.cpu_count()) as p:
-        results = (p.map(run_single_simulation, configs))
+        results = (p.map(run_single_simulation, loan_configs))
     return results
 
 
