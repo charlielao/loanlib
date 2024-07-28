@@ -8,17 +8,22 @@ import numpy as np
 custom_column_register = {}
 '''
 There are three modes of creating your own features:
-1.  You can either create a custom iterative function, that doesn't involve dates then you can use njit, currently a bit
-    buggy as it cannot handle datetime64 either
-2.  Or you can pass a dataframe in
-3.  Or you create some custom numpy vectorisation function
-Either way the result only has to be an iterable
-the decorator is mandatory to automatically handle dependencies order as well as pass in the correct columns if you 
-choose to use njit or custom numpy function
+1. If the code is easily vectorisable, then you can define a pure numpy function that computes the feature;
+2. if it is more complex iterative code, then you can simply add a @njit decorator and it will be compiled to C codes
+3. lastly if it is less numerical and require objects such as datetime, then the above don't work really well so you can 
+pass in the entire dataframe and compute as normal
 
-many function can either be vectorised or using numba, need to test which is faster
-also, for dependnecies, ideally would be able to trace the computational graph automatically with a layer in between for
-future iterations
+The first two ways are more recommended as in theory they should be faster but needs more testing
+
+The first two ways require you specify the column names of the input features in the same order of the arguments so the 
+decorator will transform the dataframe input into numpy arrays as numba is not fast on pure pandas objects 
+
+The arguments in the decorator also defines the dependencies so that all the feature functions can be defined in any order
+and the computational graph will automatically be traced and computed in the correct order
+
+for future iteration, there should be something that intercept the call and construct the computational graph automatically
+without user specifiying the dependencies explicityly
+
 '''
 
 
