@@ -2,7 +2,7 @@
 portfolio of loans. It provides simple APIs to load data, construct
 features, construct various loan metrics and run cashflow model simulations in a notebook.
 Extending features and increasing complexity should 
-also be quite straightforward the way iterative operation is defined very similarly to Excel.
+also be quite straightforward as the way iterative operation is defined is very similarly to Excel.
 
 for examples, please read below and check the notebook folder
 
@@ -11,12 +11,13 @@ the library contains several pieces:
 1. data_handler.py that loads data and automatically constructs features from custom_feature.py (in a new copy)
 ```
 #load the data like this
+
 from loanlib.data_handler import DataLoader, create_features 
 loader = DataLoader(SOURCE_FILE_PATH)
 df = loader.combined_data_frame
 loader.create_features(df)
 ```
-3. creating your own features to add to the data frame is simple, there are two main ways
+2. creating your own features to add to the data frame is simple, there are two main ways
 
   I. (more recommended) add numba @njit for complex recursive operations that don't cannot get vectorised easily, either wise use numpy operations 
 ```
@@ -36,7 +37,7 @@ loader.create_features(df)
   it also provides dependency information that helps automatically determine the order of execution so that you can define the feature in any order and the library 
   will generate them in the correct order
   
-4. load_metrics.py provides LoanMetrics class that constructs loan metrics curves (SMM, MDR, CPR, CDR, Recovery) and provides plotting and pivot tables
+3. load_metrics.py provides LoanMetrics class that constructs loan metrics curves (SMM, MDR, CPR, CDR, Recovery) and provides plotting and pivot tables
 ```
 #can pass in df, or just the data source, it will automatically load data and run the create features routine
 
@@ -49,7 +50,7 @@ curves.curve('SMM')
 curves2 = LoanMetrics(SOURCE_FILE_PATH)
 curves2.plot('CDR')
 ```
-5. model.py provides a simple implementation of the cashflow model that takes can configuration as a dictionary, to modify the model or add a row
+4. model.py provides a simple implementation of the cashflow model that takes can configuration as a dictionary, to modify the model or add a row
    simply provide a pair of functions in this form, currently as there are nonvectorisable recursive functions, we use numba to iterate through functions quickly
 ```
     @lru_cache()
@@ -61,7 +62,7 @@ curves2.plot('CDR')
     def _jitted_new_row(other_row_1: float, other_row_2: float) -> float:
         return other_row_1 - other_row_2
 ```
-6. lastly, to run cashflow models with run_simulations, which uses multiprocessing libraries to parallel workflow; on my laptop 10000 basic loans take about 15 seconds to simulate
+5. lastly, to run cashflow models with run_simulations, which uses multiprocessing libraries to parallel workflow; on my laptop 10000 basic loans take about 15 seconds to simulate
 ```
 from loanlib.core.model import run_simulations
 
