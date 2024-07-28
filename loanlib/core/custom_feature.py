@@ -9,25 +9,11 @@ from loanlib.utils import get_first_truth_value, fill_static
 
 custom_column_register = {}
 '''
-There are three modes of creating your own features:
-1. If the code is easily vectorisable, then you can define a pure numpy function that computes the feature;
-2. if it is more complex iterative code, then you can simply add a @njit decorator and it will be compiled to C codes
-3. lastly if it is less numerical and require objects such as datetime, then the above don't work really well so you can 
-pass in the entire dataframe and compute as normal
+For how to create your own features, check Read.me
 
-The first two ways are more recommended as in theory they should be faster but needs more testing to confirm
-
-The first two ways require you specify the column names of the input features in the same order of the arguments so the 
-decorator will transform the dataframe input into numpy arrays as numba cannot operate on pure pandas objects 
-
-The arguments in the decorator also defines the dependencies so that all the feature functions can be defined in any order
-and the computational graph will automatically be traced and computed in the correct order so you don't need to worry about
-the order you construct your features
-
-for future iteration, there should be something that intercept the call and construct the computational graph automatically
-without user specifying the dependencies explicitly; also possbily don't need to specify both in arguments and in the decorator
-but inferred from the function signature 
-
+for future iteration, there could be something that intercept the call and construct the computational graph automatically
+without user specifying the dependencies explicitly; also possibly don't need to specify both in arguments and in the 
+decorator but inferred from the function signature, bit tricky since some cols are not calculated 
 '''
 
 

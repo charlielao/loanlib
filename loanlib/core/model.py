@@ -8,14 +8,15 @@ from numba import njit
 _INTEREST_ONLY_LITERAL = 'Interest Only'
 _REPAYMENT_METHODS = {_INTEREST_ONLY_LITERAL}
 '''
-using numba instead because numpy cannot support recursive relationship
-could potentially use a context manager to avoid passing forecast_month everytime
+for how to extend the model, see README.md
+!!!warning: for accessing past values from another column, the condition e.g. forecast_month == 1 needs to be specificed
+in _new_row function intead of the _jitted_new_row function, as it causes infinite recursion error, this needs to be 
+handled more gracefully
 
 should use a dynamic programming table to build up the table, but determining the order is a bit involved needs topology sort
-need to specify dependency
-
-#can do Similar sort of computational graph so everything only has to be evaluated once automatically, or alternatively caching
-#could potentially refactored out all the numpy computations in fact
+need to specify dependency, similar to custom_feature.py
+could potentially refactored out all codes, having to specify two functions for one row is not ideal
+the numba decorator probably doesn't need to cache
 '''
 
 
