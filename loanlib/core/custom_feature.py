@@ -4,6 +4,7 @@ import pandas as pd
 from numba import njit
 from functools import wraps
 import numpy as np
+from numpy.typing import ArrayLike
 from loanlib.utils import get_first_truth_value, fill_static
 
 custom_column_register = {}
@@ -50,7 +51,10 @@ def get_static_value(values):
 
 
 @custom_feature('Payment Made', 'original_balance')
-def current_balance(payments_made: np.array, balances: np.array):
+def current_balance(payments_made: ArrayLike, balances: ArrayLike) -> ArrayLike:
+    '''
+    The current balance outstanding for each loan and month.
+    '''
     return np.clip(balances - np.cumsum(payments_made), a_min=0.0, a_max=None)
 
 
@@ -59,13 +63,19 @@ def diff_month(d1, d2):
 
 
 @custom_feature()
-def seasoning(df: pd.DataFrame):
+def seasoning(df: pd.DataFrame) -> pd.DataFrame:
+    '''
+    the integer number of months since the loan was originated at each month.
+    '''
     return df.apply(lambda row : diff_month(row['Date'], row['origination_date']), axis=1)
 
 
 @custom_feature('Payment Made', 'Payment Due')
 @njit
-def missed_payments(payment_made: np.array, payment_due: np.array):
+def missed_payments(payment_made: ArrayLike, payment_due: ArrayLike) -> ArrayLike:
+    '''
+    whether this payment is missed
+    '''
     results = np.zeros(len(payment_made), dtype=np.bool_)
     for index, (made, due) in enumerate(zip(payment_made, payment_due)):
         results[index] = (made < due)
@@ -74,7 +84,10 @@ def missed_payments(payment_made: np.array, payment_due: np.array):
 
 @custom_feature('missed_payments')
 @njit
-def n_missed_payments(missing_payments: np.array):
+def n_missed_payments(missing_payments: ArrayLike) -> ArrayLike:
+    '''
+    number of missed payments in a row.
+    '''
     curr_count = 0
     results = np.zeros(len(missing_payments))
     for index, missed in enumerate(missing_payments):
@@ -88,7 +101,10 @@ def n_missed_payments(missing_payments: np.array):
 
 @custom_feature('Payment Made', 'Payment Due', 'current_balance')
 @njit
-def prepaid_in_month(payment_made: np.array, payment_due: np.array, balance:np.array):
+def prepaid_in_month(payment_made: ArrayLike, payment_due: ArrayLike, balance: ArrayLike) -> ArrayLike:
+    '''
+    a flag indicating that the borrower prepaid in a given month.
+    '''
     results = np.zeros(len(balance), dtype=np.bool_)
     for index, (p_made, p_due, balance) in enumerate(zip(payment_made, payment_due, balance)):
         results[index] = p_made > p_due and balance < 1e-8
@@ -97,7 +113,10 @@ def prepaid_in_month(payment_made: np.array, payment_due: np.array, balance:np.a
 
 @custom_feature('n_missed_payments')
 @njit
-def default_in_month(missing_payments: np.array):
+def default_in_month(missing_payments: ArrayLike) -> ArrayLike:
+    '''
+    a flag indicating that the borrower defaulted in a given month.
+    '''
     results = np.zeros(len(missing_payments), dtype=np.bool_)
     has_default = False
     for index, missed in enumerate(missing_payments):
@@ -108,7 +127,10 @@ def default_in_month(missing_payments: np.array):
 
 @custom_feature('is_recovery_payment')
 @njit
-def recovery_in_month(recovery_payment: np.array):
+def recovery_in_month(recovery_payment: ArrayLike) -> ArrayLike:
+    '''
+    a flag indicating that a recovery has been made post-default in a given month.
+    '''
     results = np.zeros(len(recovery_payment), dtype=np.bool_)
     has_recovery = False
     for index, recovery in enumerate(recovery_payment):
@@ -118,7 +140,10 @@ def recovery_in_month(recovery_payment: np.array):
 
 
 @custom_feature('Date', 'date_of_default', 'Payment Made')
-def is_recovery_payment(dates: np.array, default_date: np.array, payment_made: np.array):
+def is_recovery_payment(dates: ArrayLike, default_date: ArrayLike, payment_made: ArrayLike) -> ArrayLike:
+    '''
+    a flag indicating whether the associated payment has been made post-default.
+    '''
     if np.isnan(default_date).any():
         return np.full(shape=len(default_date), fill_value=False)
     else:
@@ -128,19 +153,28 @@ def is_recovery_payment(dates: np.array, default_date: np.array, payment_made: n
 
 
 @custom_feature()
-def time_to_reversion(df: pd.DataFrame):
+def time_to_reversion(df: pd.DataFrame) -> pd.DataFrame:
+    '''
+    The integer number of months until the laon reverts. This is negative if the loan is before reversion and 0 at the month of reversion.
+    '''
     return df.apply(lambda row : diff_month(row['reversion_date'], row['Date']), axis=1)
 
 
 @custom_feature('investor_1_acquisition_date', 'Date')
-def is_post_seller_purchase_date(acquisition_date: np.array, dates: np.array):
+def is_post_seller_purchase_date(acquisition_date: ArrayLike, dates: ArrayLike) -> ArrayLike:
+    '''
+    Is this time period after the seller purchased this loan.
+    '''
     acquisition_date = acquisition_date[0]
     return np.apply_along_axis(lambda x: x >= acquisition_date, 0, dates.astype('datetime64'))
 
 
 @custom_feature('Payment Made', 'is_recovery_payment')
 @njit
-def postdefault_recoveries(payment_made: np.array, recovery_payment_flag: np.array):
+def postdefault_recoveries(payment_made: ArrayLike, recovery_payment_flag: ArrayLike) -> ArrayLike:
+    '''
+    The cumulative recoveries post-default.
+    '''
     cum_recovery = 0.0
     for index, (payment, is_recovery) in enumerate(zip(payment_made, recovery_payment_flag)):
         cum_recovery += payment if is_recovery else 0.0
@@ -148,46 +182,75 @@ def postdefault_recoveries(payment_made: np.array, recovery_payment_flag: np.arr
 
 
 @custom_feature('Date', 'prepaid_in_month')
-def prepayment_date(dates: np.array, prepaids: np.array):
+def prepayment_date(dates: ArrayLike, prepaids: ArrayLike) -> ArrayLike:
+    '''
+    the date that the loan prepays (or nan if it does not).
+    '''
     idx = get_first_truth_value(prepaids)
     return fill_static(dates[idx] if idx>0 else None, len(prepaids))
 
 
 @custom_feature('Date', 'default_in_month')
-def date_of_default(dates: np.array, default_month_flag: np.array):
+def date_of_default(dates: ArrayLike, default_month_flag: ArrayLike) -> ArrayLike:
+    '''
+    the date that the loan defaults (or nan if it does not).
+    '''
     idx = get_first_truth_value(default_month_flag)
     return fill_static(dates[idx] if idx > 0 else None, len(default_month_flag))
 
 
 @custom_feature('Date', 'is_recovery_payment')
-def date_of_recovery(dates: np.array, recovery_payment_flag: np.array):
+def date_of_recovery(dates: ArrayLike, recovery_payment_flag: ArrayLike) -> ArrayLike:
+    '''
+    the date that a recovery is made on the loan, post-default.
+    '''
     idx = get_first_truth_value(recovery_payment_flag)
     return fill_static(dates[idx] if idx > 0 else None, len(recovery_payment_flag))
 
 
 @custom_feature('current_balance', 'default_in_month')
-def exposure_at_default(balances: np.array, default_month: np.array):
+def exposure_at_default(balances: ArrayLike, default_month: ArrayLike) -> ArrayLike:
+    '''
+    the current balance of the loan outstanding at default.
+    '''
     idx = get_first_truth_value(default_month)
     return fill_static(balances[idx] if idx > 0 else None, len(default_month), False)
 
 
 @custom_feature('postdefault_recoveries', 'exposure_at_default')
-def recovery_percent(recoveries: np.array, exposures: np.array):
+def recovery_percent(recoveries: ArrayLike, exposures: ArrayLike) -> ArrayLike:
+    '''
+    the postdefault_recoveries as a percentage of the exposure at default.
+    '''
     return fill_static(get_static_value(recoveries) / get_static_value(exposures), len(recoveries), False)
 
 
 @custom_feature('date_of_default', 'Date')
-def months_since_default(df: pd.DataFrame):
+def months_since_default(df: pd.DataFrame) -> pd.DataFrame:
+    '''
+    the number months since default happend
+    '''
     return df.apply(lambda row : diff_month(row['date_of_default'], row['Date']), axis=1)
 
 
 @custom_feature('date_of_default')
-def year_of_default(df: pd.DataFrame):
+def year_of_default(df: pd.DataFrame) -> pd.DataFrame:
+    '''
+    the year defaults happend
+    '''
     return df['date_of_default'].apply(lambda x: x.year)
 
 
 @custom_feature('date_of_default', 'default_in_month', 'Payment Made', 'Payment Due')
-def defaulted_amounts(default_dates: np.array, default_in_months_flag: np.array, payments_made: np.array, payments_due: np.array):
+def defaulted_amounts(default_dates: ArrayLike, default_in_months_flag: ArrayLike, payments_made: ArrayLike, payments_due: ArrayLike) -> ArrayLike:
+    '''
+    how much accumulated default amounts there are at each month
+    :param default_dates:
+    :param default_in_months_flag:
+    :param payments_made:
+    :param payments_due:
+    :return:
+    '''
     defaulted_date = get_static_value(default_dates)
     if np.isnan(defaulted_date).any():
         return fill_static(0.0, len(default_dates), False)
@@ -199,7 +262,10 @@ def defaulted_amounts(default_dates: np.array, default_in_months_flag: np.array,
 
 @custom_feature('defaulted_amounts', 'current_balance', 'Payment Made', 'Payment Due')
 @njit
-def outstanding_balance(default_amounts: np.array, balances: np.array, payments_made: np.array, payments_due: np.array):
+def outstanding_balance(default_amounts: ArrayLike, balances: ArrayLike, payments_made: ArrayLike, payments_due: ArrayLike) -> ArrayLike:
+    '''
+    the total outstanding balance that has not defaulted or prepaid
+    '''
     results = np.zeros(len(balances))
     for index, (default_amount, balance, payment_made, payments_due) in enumerate(zip(default_amounts, balances, payments_made, payments_due)):
         #end of month balance adds back the prepaid amount and subtract the default amount
@@ -208,19 +274,40 @@ def outstanding_balance(default_amounts: np.array, balances: np.array, payments_
 
 
 @custom_feature('prepaid_in_month', 'Payment Made', 'Payment Due', 'outstanding_balance')
-def smm(prepaid_month: np.array, payments_made: np.array, payments_due: np.array, balances: np.array):
+def smm(prepaid_month: ArrayLike, payments_made: ArrayLike, payments_due: ArrayLike, balances: ArrayLike) -> ArrayLike:
+    '''
+    the single monthly mortality rate
+    :param prepaid_month:
+    :param payments_made:
+    :param payments_due:
+    :param balances:
+    :return:
+    '''
     if np.isnan(prepaid_month).any():
         return fill_static(0.0, len(prepaid_month), False)
     return (payments_made - payments_due) / balances
 
 
 @custom_feature('date_of_default', 'Payment Made', 'Payment Due', 'outstanding_balance')
-def mdr(default_date: np.array, payments_made: np.array, payments_due: np.array, balances: np.array):
+def mdr(default_date: ArrayLike, payments_made: ArrayLike, payments_due: ArrayLike, balances: ArrayLike) -> ArrayLike:
+    '''
+    the monthly default rate
+    :param default_date:
+    :param payments_made:
+    :param payments_due:
+    :param balances:
+    :return:
+    '''
     if np.isnan(default_date).any():
         return fill_static(0.0, len(default_date), False)
     return (payments_due - payments_made) / balances
 
 
 @custom_feature('recovery_percent')
-def recovery(recover_percent: np.array):
+def recovery(recover_percent: ArrayLike) -> ArrayLike:
+    '''
+    the recovery rate
+    :param recover_percent:
+    :return:
+    '''
     return recover_percent
