@@ -301,7 +301,7 @@ def mdr(default_date: ArrayLike, payments_made: ArrayLike, payments_due: ArrayLi
     '''
     if np.isnan(default_date).any():
         return fill_static(0.0, len(default_date), False)
-    return np.divide( (payments_due - payments_made) , balances, where=(abs(balances) >1e-3))
+    return np.divide( abs(payments_due - payments_made) , balances, where=(abs(balances) >1e-3))
 
 
 @custom_feature('recovery_percent')

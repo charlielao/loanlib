@@ -60,6 +60,7 @@ class CurveBuilder:
             return cpr.apply(CurveBuilder.annualize)
         else:
             cpr['cpr'] = cpr['smm'].apply(CurveBuilder.annualize)
+            cpr.drop(columns=['smm'], inplace=True)
             return cpr
 
     @classmethod
@@ -69,6 +70,7 @@ class CurveBuilder:
             return cdr.apply(CurveBuilder.annualize)
         else:
             cdr['cdr'] = cdr['mdr'].apply(CurveBuilder.annualize)
+            cdr.drop(columns=['mdr'], inplace=True)
             return cdr
 
     @classmethod
