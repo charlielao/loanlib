@@ -2,7 +2,7 @@ import pandas as pd
 from typing import Tuple, List, Callable
 
 
-class CurveBuilder:
+class LoanMetrics:
     def __init__(self, df: pd.DataFrame|str, index: str = 'seasoning', pivots: List[str] = ()):
         if isinstance(df, str):
             from loanlib.data_handler import DataLoader, create_features
@@ -57,9 +57,9 @@ class CurveBuilder:
     def cpr(cls, df: pd.DataFrame, index: str, pivots: List[str]):
         cpr = cls.smm(df, index, pivots)
         if pivots:
-            return cpr.apply(CurveBuilder.annualize)
+            return cpr.apply(LoanMetrics.annualize)
         else:
-            cpr['cpr'] = cpr['smm'].apply(CurveBuilder.annualize)
+            cpr['cpr'] = cpr['smm'].apply(LoanMetrics.annualize)
             cpr.drop(columns=['smm'], inplace=True)
             return cpr
 
@@ -67,9 +67,9 @@ class CurveBuilder:
     def cdr(cls, df: pd.DataFrame, index: str, pivots: List[str]):
         cdr = cls.mdr(df, index, pivots)
         if pivots:
-            return cdr.apply(CurveBuilder.annualize)
+            return cdr.apply(LoanMetrics.annualize)
         else:
-            cdr['cdr'] = cdr['mdr'].apply(CurveBuilder.annualize)
+            cdr['cdr'] = cdr['mdr'].apply(LoanMetrics.annualize)
             cdr.drop(columns=['mdr'], inplace=True)
             return cdr
 
