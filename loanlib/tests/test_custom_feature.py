@@ -14,14 +14,14 @@ def example_portfolio():
 
 def small_portfolio():
     SOURCE_FILE_PATH = '../../data/2024 - Strat Casestudy.xlsx'
-    from loanlib.data_handler import DataLoader, create_features
+    from loanlib.data_loader import DataLoader
     import random
     random.seed(10)
     loader = DataLoader(SOURCE_FILE_PATH)
     df = loader.combined_data_frame
     all_loans = set(index[0] for index in df.index)
     random_set = random.sample(list(all_loans),10)
-    return create_features(df[df.index.get_level_values('ID').isin(random_set)])
+    return loader.create_features(df[df.index.get_level_values('ID').isin(random_set)])
 
 
 class TestCustomeFeatures:

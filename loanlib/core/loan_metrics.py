@@ -5,8 +5,9 @@ from typing import Tuple, List, Callable
 class LoanMetrics:
     def __init__(self, df: pd.DataFrame|str, index: str = 'seasoning', pivots: List[str] = ()):
         if isinstance(df, str):
-            from loanlib.data_handler import DataLoader, create_features
-            df = create_features(DataLoader(df).combined_data_frame)
+            from loanlib.data_loader import DataLoader
+            loader = DataLoader(df)
+            df = loader.create_features(loader.combined_data_frame)
         self.df = df
         self.index = index
         self.pivots = pivots
@@ -28,6 +29,8 @@ class LoanMetrics:
                 raise NotImplementedError(f'{curve_type} Curve is not implemented')
 
     def plot(self, curve_type: str):
+        if self.pivots:
+            raise ValueError('Cannot plot pivoted data')
         import matplotlib.pyplot as plt
         return plt.plot(self.curve(curve_type)[curve_type.lower()])
 

@@ -69,23 +69,24 @@ class DataLoader:
         df_final = df_final.set_index(['ID', 'Date'], drop=False)
         return df_final
 
-
-def create_features(df: pd.DataFrame, skipped_features: List[str] = []):
-    from loanlib.core import custom_feature
-    from graphlib import TopologicalSorter
-    import inspect
-    register = custom_feature.custom_column_register
-    function_name_map = dict(inspect.getmembers(custom_feature, inspect.isfunction))
-    all_custom_funcs = set(register.keys())
-    dependency_graph = {func: {dep for dep in deps if dep in all_custom_funcs } for func, deps in register.items()}
-    df.sort_index(inplace=True)
-    for func_name in TopologicalSorter(dependency_graph).static_order():
-        if func_name not in skipped_features:
-            func = function_name_map[func_name]
-            has_dependencies = len( register[func_name] ) > 0
-            #needs to properly handle np.nan vs None in the future
-            df[func_name] = pd.Series(df.groupby(level=['ID']).apply(func).replace({None:np.nan}).values.flatten()
-                                      if has_dependencies else func(df)).values
-    df.drop(columns=df.index.names, inplace=True)
-    return df
+    @staticmethod
+    def create_features(passed_df: pd.DataFrame, skipped_features: List[str] = []):
+        from loanlib.core import custom_feature
+        from graphlib import TopologicalSorter
+        import inspect
+        df = passed_df.copy()
+        register = custom_feature.custom_column_register
+        function_name_map = dict(inspect.getmembers(custom_feature, inspect.isfunction))
+        all_custom_funcs = set(register.keys())
+        dependency_graph = {func: {dep for dep in deps if dep in all_custom_funcs } for func, deps in register.items()}
+        df.sort_index(inplace=True)
+        for func_name in TopologicalSorter(dependency_graph).static_order():
+            if func_name not in skipped_features:
+                func = function_name_map[func_name]
+                has_dependencies = len( register[func_name] ) > 0
+                #needs to properly handle np.nan vs None in the future
+                df[func_name] = pd.Series(df.groupby(level=['ID']).apply(func).replace({None:np.nan}).values.flatten()
+                                          if has_dependencies else func(df)).values
+        df.drop(columns=df.index.names, inplace=True)
+        return df
 
