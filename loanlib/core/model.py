@@ -12,6 +12,7 @@ for how to extend the model, see README.md
 !!!warning: for accessing past values from another column, the condition e.g. forecast_month == 1 needs to be specified
 in _new_row function instead of the _jitted_new_row function, as it causes infinite recursion error, this needs to be 
 handled better
+!!!also, the _func needs to define forecast_month as a argument so that it controls where it is on the timeline
 
 should use a dynamic programming table to build up the table, but determining the order is a bit involved needs topology sort
 need to specify dependency, similar to custom_feature.py
