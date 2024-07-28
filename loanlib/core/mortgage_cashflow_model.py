@@ -11,10 +11,13 @@ _REPAYMENT_METHODS = {_INTEREST_ONLY_LITERAL}
 using numba instead because numpy cannot support recursive relationship
 could potentially use a context manager to avoid passing forecast_month everytime
 
-should use a dynamic programming table to build up the table, but determining the order is a bit involved
-'''
+should use a dynamic programming table to build up the table, but determining the order is a bit involved needs topology sort
+need to specify dependency
+
 #can do Similar sort of computational graph so everything only has to be evaluated once automatically, or alternatively caching
 #could potentially refactored out all the numpy computations in fact
+'''
+
 
 class MortgageCashflowModel:
 

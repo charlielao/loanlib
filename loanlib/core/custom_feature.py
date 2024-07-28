@@ -18,10 +18,11 @@ pass in the entire dataframe and compute as normal
 The first two ways are more recommended as in theory they should be faster but needs more testing to confirm
 
 The first two ways require you specify the column names of the input features in the same order of the arguments so the 
-decorator will transform the dataframe input into numpy arrays as numba is not fast on pure pandas objects 
+decorator will transform the dataframe input into numpy arrays as numba cannot operate on pure pandas objects 
 
 The arguments in the decorator also defines the dependencies so that all the feature functions can be defined in any order
-and the computational graph will automatically be traced and computed in the correct order
+and the computational graph will automatically be traced and computed in the correct order so you don't need to worry about
+the order you construct your features
 
 for future iteration, there should be something that intercept the call and construct the computational graph automatically
 without user specifying the dependencies explicitly; also possbily don't need to specify both in arguments and in the decorator
