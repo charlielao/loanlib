@@ -29,38 +29,36 @@ class CurveBuilder:
         return plt.plot(self.curve(curve_type))
 
     @classmethod
-    def _generate_base_metric(cls, metric_name: str, metric_calc_func: Callable, df: pd.DataFrame, index: str, pivots: List[str]):
+    def _generate_base_metric(cls, metric_name: str, df: pd.DataFrame, index: str, pivots: List[str]):
         transformed_df = df.reset_index().set_index([index])
-        transformed_df[metric_name] = transformed_df.apply(axis=1, func=metric_calc_func)
         if not pivots:
-            return transformed_df.groupby(index)[metric_name].sum()
+            resulting_df = transformed_df.groupby(index, as_index=False)[metric_name].sum()
+            resulting_df.index.name = index
+            return resulting_df
         else:
-            return pd.pivot_table(transformed_df, values = metric_name, index = index, columns = pivots, aggfunc = 'sum')
+            return pd.pivot_table(transformed_df, values=metric_name, index=index, columns=pivots, aggfunc = 'sum')
 
     @classmethod
     def smm(cls, df: pd.DataFrame, index: str, pivots: List[str]):
-        func = lambda row: 0.0 if not row['prepaid_in_month'] else (row['Payment Made'] - row['Payment Due']) / (row['current_balance'])
-        return cls._generate_base_metric( 'SMM', func, df, index, pivots )
+        return cls._generate_base_metric( 'smm', df, index, pivots )
 
     @classmethod
     def mdr(cls, df: pd.DataFrame, index: str, pivots: List[str]):
-        func = lambda row: 0.0 if not row['prepaid_in_month'] else (row['Payment Due'] - row['Payment Made']) / (row['current_balance'])
-        return cls._generate_base_metric( 'MDR', func, df, index, pivots )
+        return cls._generate_base_metric( 'mdr', df, index, pivots )
 
     @classmethod
     def cpr(cls, df: pd.DataFrame, index: str, pivots: List[str]):
         cpr = cls.smm(df, index, pivots)
-        cpr['CPR'] = cpr['SMM'].apply(lambda x: (1 - x) ^ 12)
+        cpr['cpr'] = cpr['smm'].apply(lambda x: 1.0 - (1.0 - x) ** 12)
         return cpr
 
     @classmethod
     def cdr(cls, df: pd.DataFrame, index: str, pivots: List[str]):
         cdr = cls.mdr(df, index, pivots)
-        cdr['CDR'] = cdr['MDR'].apply(lambda x: (1 - x) ^ 12)
+        cdr['cdr'] = cdr['mdr'].apply(lambda x: 1.0 - (1 - x) ** 12)
         return cdr
 
     @classmethod
     def recover_curve(cls, df: pd.DataFrame, index: str, pivots: List[str]):
-        func = lambda row: row['recovery_percent']
-        return cls._generate_base_metric( 'Recovery', func, df, index, pivots )
+        return cls._generate_base_metric('recovery', df, index, pivots )
 

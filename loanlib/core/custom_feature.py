@@ -22,7 +22,8 @@ The arguments in the decorator also defines the dependencies so that all the fea
 and the computational graph will automatically be traced and computed in the correct order
 
 for future iteration, there should be something that intercept the call and construct the computational graph automatically
-without user specifiying the dependencies explicityly
+without user specifying the dependencies explicitly; also possbily don't need to specify both in arguments and in the decorator
+but infered from the function signature 
 
 '''
 
@@ -41,6 +42,7 @@ def custom_feature(*column_names, **kwargs):
             return pd.Series(func(*columns_as_lists))
         return wrapper
     return decorator
+
 
 def get_static_value(values):
     return values[0]
@@ -188,5 +190,45 @@ def months_since_default(df: pd.DataFrame):
 
 
 @custom_feature('date_of_default')
-def year_of_default( df: pd.DataFrame):
+def year_of_default(df: pd.DataFrame):
     return df['date_of_default'].apply(lambda x: x.year)
+
+
+@custom_feature('date_of_default', 'default_in_month', 'Payment Made', 'Payment Due')
+def defaulted_amounts(default_dates: np.array, default_in_months_flag: np.array, payments_made: np.array, payments_due: np.array):
+    defaulted_date = get_static_value(default_dates)
+    if np.isnan(defaulted_date).any():
+        return fill_static(0.0, len(default_dates), False)
+    idx = get_first_truth_value(default_in_months_flag)-2#the third day
+    results = np.zeros(len(default_dates))
+    results[idx:] = np.cumsum(payments_due[idx:]) - np.cumsum(payments_made[idx:])
+    return results
+
+
+@custom_feature('defaulted_amounts', 'current_balance', 'Payment Made', 'Payment Due')
+@njit
+def outstanding_balance(default_amounts: np.array, balances: np.array, payments_made: np.array, payments_due: np.array):
+    results = np.zeros(len(balances))
+    for index, (default_amount, balance, payment_made, payments_due) in enumerate(zip(default_amounts, balances, payments_made, payments_due)):
+        #end of month balance adds back the prepaid amount and subtract the default amount
+        results[index] = balance + ( payment_made - payments_due ) - default_amount
+    return results
+
+
+@custom_feature('prepaid_in_month', 'Payment Made', 'Payment Due', 'outstanding_balance')
+def smm(prepaid_month: np.array, payments_made: np.array, payments_due: np.array, balances: np.array):
+    if np.isnan(prepaid_month).any():
+        return fill_static(0.0, len(prepaid_month), False)
+    return (payments_made - payments_due) / balances
+
+
+@custom_feature('date_of_default', 'Payment Made', 'Payment Due', 'outstanding_balance')
+def mdr(default_date: np.array, payments_made: np.array, payments_due: np.array, balances: np.array):
+    if np.isnan(default_date).any():
+        return fill_static(0.0, len(default_date), False)
+    return (payments_due - payments_made) / balances
+
+
+@custom_feature('recovery_percent')
+def recovery(recover_percent: np.array):
+    return recover_percent

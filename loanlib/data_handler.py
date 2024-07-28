@@ -77,6 +77,7 @@ def augment_data_frame(df: pd.DataFrame, skipped_features: List[str] = []):
     function_name_map = dict(inspect.getmembers(custom_feature, inspect.isfunction))
     all_custom_funcs = set(register.keys())
     dependency_graph = {func: {dep for dep in deps if dep in all_custom_funcs } for func, deps in register.items()}
+    df.sort_index(inplace=True)
     for func_name in TopologicalSorter(dependency_graph).static_order():
         if func_name not in skipped_features:
             func = function_name_map[func_name]
