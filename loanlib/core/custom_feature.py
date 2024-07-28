@@ -4,6 +4,7 @@ import pandas as pd
 from numba import njit
 from functools import wraps
 import numpy as np
+from loanlib.utils import get_first_truth_value, fill_static
 
 custom_column_register = {}
 '''
@@ -135,15 +136,6 @@ def time_to_reversion(df: pd.DataFrame):
 def is_post_seller_purchase_date(acquisition_date: np.array, dates: np.array):
     acquisition_date = acquisition_date[0]
     return np.apply_along_axis(lambda x: x >= acquisition_date, 0, dates.astype('datetime64'))
-
-
-def get_first_truth_value(arr: np.array):
-    idx = np.argmax(arr)
-    return idx if arr[idx] else -1
-
-
-def fill_static(fill_value, size: int, is_date: bool = True):
-    return np.full(shape=size, fill_value=fill_value if fill_value is None else (np.datetime64(fill_value) if is_date else fill_value))
 
 
 @custom_feature('Payment Made', 'is_recovery_payment')

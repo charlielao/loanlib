@@ -22,7 +22,7 @@ class CurveBuilder:
             case 'Recovery':
                 return self.recover_curve(*args)
             case _:
-                raise NotImplementedError(f'{curve_type} is not implemented')
+                raise NotImplementedError(f'{curve_type} Curve is not implemented')
 
     def plot(self, curve_type: str):
         import matplotlib.pyplot as plt
@@ -36,7 +36,7 @@ class CurveBuilder:
             resulting_df.index.name = index
             return resulting_df
         else:
-            return pd.pivot_table(transformed_df, values=metric_name, index=index, columns=pivots, aggfunc = 'sum')
+            return pd.pivot_table(transformed_df, values=metric_name, index=index, columns=pivots, aggfunc='sum')
 
     @classmethod
     def smm(cls, df: pd.DataFrame, index: str, pivots: List[str]):
@@ -46,19 +46,29 @@ class CurveBuilder:
     def mdr(cls, df: pd.DataFrame, index: str, pivots: List[str]):
         return cls._generate_base_metric( 'mdr', df, index, pivots )
 
+    @staticmethod
+    def annualize(x):
+        return 1.0 - (1.0 - x) ** 12
+
     @classmethod
     def cpr(cls, df: pd.DataFrame, index: str, pivots: List[str]):
         cpr = cls.smm(df, index, pivots)
-        cpr['cpr'] = cpr['smm'].apply(lambda x: 1.0 - (1.0 - x) ** 12)
-        return cpr
+        if pivots:
+            return cpr.apply(CurveBuilder.annualize)
+        else:
+            cpr['cpr'] = cpr['smm'].apply(CurveBuilder.annualize)
+            return cpr
 
     @classmethod
     def cdr(cls, df: pd.DataFrame, index: str, pivots: List[str]):
         cdr = cls.mdr(df, index, pivots)
-        cdr['cdr'] = cdr['mdr'].apply(lambda x: 1.0 - (1 - x) ** 12)
-        return cdr
+        if not pivots:
+            return cdr.apply(CurveBuilder.annualize)
+        else:
+            cdr['cpr'] = cdr['mdr'].apply(CurveBuilder.annualize)
+            return cdr
 
     @classmethod
     def recover_curve(cls, df: pd.DataFrame, index: str, pivots: List[str]):
-        return cls._generate_base_metric('recovery', df, index, pivots )
+        return cls._generate_base_metric('recovery', df, index, pivots)
 
