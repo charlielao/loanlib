@@ -1,5 +1,6 @@
 import pandas as pd
 import datetime
+from typing import List
 
 
 class DataLoader:
@@ -8,7 +9,7 @@ class DataLoader:
         self.all_spreadsheets = pd.read_excel(self.file_path, sheet_name=None)
         self.data_sheet_names = tuple(sheet_name for sheet_name in self.all_spreadsheets if self._sheet_contains_data(sheet_name))
         self.data_frames = {sheet_name: self._format_data_frame(self.all_spreadsheets[sheet_name]) for sheet_name in self.data_sheet_names}
-        self.combined_data_frame = self.combine_data_frames()
+        self.combined_data_frame = self._combine_data_frames()
 
     @classmethod
     def _sheet_contains_data(cls, sheet_name: str):
@@ -26,6 +27,7 @@ class DataLoader:
 
     @classmethod
     def _validate_data_frame(cls, df: pd.DataFrame):
+        'should implement this to make sure data is clean e.g. only month end dates, no overlap etc.'
         pass
 
     @classmethod
@@ -46,7 +48,7 @@ class DataLoader:
     def _melt_time_series(df: pd.DataFrame, source_name: str):
         return df.reset_index().melt(id_vars='ID', var_name='Date', value_name=source_name)
 
-    def combine_data_frames(self):
+    def _combine_data_frames(self):
         from functools import reduce
         time_series_dfs = []
         static_dfs = []
@@ -67,7 +69,7 @@ class DataLoader:
         return df_final
 
 
-def augment_data_frame(df: pd.DataFrame):
+def augment_data_frame(df: pd.DataFrame, skipped_features: List[str] = []):
     from loanlib.core import custom_feature
     from graphlib import TopologicalSorter
     import inspect
@@ -76,10 +78,11 @@ def augment_data_frame(df: pd.DataFrame):
     all_custom_funcs = set(register.keys())
     dependency_graph = {func: {dep for dep in deps if dep in all_custom_funcs } for func, deps in register.items()}
     for func_name in TopologicalSorter(dependency_graph).static_order():
-        func = function_name_map[func_name]
-        has_dependencies = len( register[func_name] ) > 0
-        df[func_name] = pd.Series(df.groupby(level=['ID']).apply(func).values.flatten()
-                                  if has_dependencies else func(df)).values
+        if func_name not in skipped_features:
+            func = function_name_map[func_name]
+            has_dependencies = len( register[func_name] ) > 0
+            df[func_name] = pd.Series(df.groupby(level=['ID']).apply(func).values.flatten()
+                                      if has_dependencies else func(df)).values
     df.drop(columns=df.index.names, inplace=True)
     return df
 

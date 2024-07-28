@@ -42,13 +42,6 @@ def custom_feature(*column_names, **kwargs):
         return wrapper
     return decorator
 
-
-def fill_static(fill_array, reference_array, is_date: bool=True):
-    idx = np.argmax(reference_array)
-    return np.full(shape=len(reference_array), fill_value=(np.datetime64(fill_array[idx]) if is_date else fill_array[idx])
-                                                        if reference_array[idx] else None)
-
-
 def get_static_value(values):
     return values[0]
 
@@ -78,10 +71,10 @@ def missed_payments(payment_made: np.array, payment_due: np.array):
 
 @custom_feature('missed_payments')
 @njit
-def n_missed_payments(missed_payments: np.array):
+def n_missed_payments(missing_payments: np.array):
     curr_count = 0
-    results = np.zeros(len(missed_payments))
-    for index, missed in enumerate(missed_payments):
+    results = np.zeros(len(missing_payments))
+    for index, missed in enumerate(missing_payments):
         if missed:
             curr_count += 1
         else:
@@ -92,19 +85,19 @@ def n_missed_payments(missed_payments: np.array):
 
 @custom_feature('Payment Made', 'Payment Due', 'current_balance')
 @njit
-def prepaid_in_month(payment_made: np.array, payment_due: np.array, current_balance:np.array):
-    results = np.zeros(len(current_balance), dtype=np.bool_)
-    for index, (p_made, p_due, balance) in enumerate(zip(payment_made, payment_due, current_balance)):
+def prepaid_in_month(payment_made: np.array, payment_due: np.array, balance:np.array):
+    results = np.zeros(len(balance), dtype=np.bool_)
+    for index, (p_made, p_due, balance) in enumerate(zip(payment_made, payment_due, balance)):
         results[index] = p_made > p_due and balance < 1e-8
     return results
 
 
 @custom_feature('n_missed_payments')
 @njit
-def default_in_month(missed_payments: np.array):
-    results = np.zeros(len(missed_payments), dtype=np.bool_)
+def default_in_month(missing_payments: np.array):
+    results = np.zeros(len(missing_payments), dtype=np.bool_)
     has_default = False
-    for index, missed in enumerate(missed_payments):
+    for index, missed in enumerate(missing_payments):
         has_default = has_default or missed >= 3
         results[index] = has_default
     return results
@@ -122,11 +115,11 @@ def recovery_in_month(recovery_payment: np.array):
 
 
 @custom_feature('Date', 'date_of_default', 'Payment Made')
-def is_recovery_payment(dates: np.array, date_of_default: np.array, payment_made: np.array):
-    if np.isnan(date_of_default).any():
-        return np.full(shape=len(date_of_default), fill_value=False)
+def is_recovery_payment(dates: np.array, default_date: np.array, payment_made: np.array):
+    if np.isnan(default_date).any():
+        return np.full(shape=len(default_date), fill_value=False)
     else:
-        default_date = get_static_value(date_of_default)
+        default_date = get_static_value(default_date)
         applicable_dates = np.apply_along_axis(lambda x: x>default_date, 0, dates.astype('datetime64'))
         return np.logical_and(applicable_dates, np.apply_along_axis(lambda x:x>0.0, 0, payment_made))
 
@@ -141,38 +134,52 @@ def is_post_seller_purchase_date(acquisition_date: np.array, dates: np.array):
     acquisition_date = acquisition_date[0]
     return np.apply_along_axis(lambda x: x >= acquisition_date, 0, dates.astype('datetime64'))
 
+
+def get_first_truth_value(arr: np.array):
+    idx = np.argmax(arr)
+    return idx if arr[idx] else -1
+
+
+def fill_static(fill_value, size: int, is_date: bool = True):
+    return np.full(shape=size, fill_value=fill_value if fill_value is None else (np.datetime64(fill_value) if is_date else fill_value))
+
+
 @custom_feature('Payment Made', 'is_recovery_payment')
 @njit
-def postdefault_recoveries(payment_made: np.array, is_recovery_payment: np.array):
+def postdefault_recoveries(payment_made: np.array, recovery_payment_flag: np.array):
     cum_recovery = 0.0
-    for index, (payment, is_recovery) in enumerate(zip(payment_made, is_recovery_payment)):
+    for index, (payment, is_recovery) in enumerate(zip(payment_made, recovery_payment_flag)):
         cum_recovery += payment if is_recovery else 0.0
     return np.full(shape=len(payment_made), fill_value=cum_recovery)
 
 
 @custom_feature('Date', 'prepaid_in_month')
 def prepayment_date(dates: np.array, prepaids: np.array):
-    return fill_static(dates, prepaids)
+    idx = get_first_truth_value(prepaids)
+    return fill_static(dates[idx] if idx>0 else None, len(prepaids))
 
 
 @custom_feature('Date', 'default_in_month')
-def date_of_default(dates: np.array, default_in_month: np.array):
-    return fill_static(dates, default_in_month)
+def date_of_default(dates: np.array, default_month_flag: np.array):
+    idx = get_first_truth_value(default_month_flag)
+    return fill_static(dates[idx] if idx > 0 else None, len(default_month_flag))
 
 
 @custom_feature('Date', 'is_recovery_payment')
-def date_of_recovery(dates: np.array, is_recovery_payment: np.array):
-    return fill_static(dates, is_recovery_payment)
+def date_of_recovery(dates: np.array, recovery_payment_flag: np.array):
+    idx = get_first_truth_value(recovery_payment_flag)
+    return fill_static(dates[idx] if idx > 0 else None, len(recovery_payment_flag))
 
 
-@custom_feature('Month End Balances', 'default_in_month')
-def exposure_at_default(month_end_balances: np.array, default_in_month: np.array):
-    return fill_static(month_end_balances, default_in_month, False)
+@custom_feature('current_balance', 'default_in_month')
+def exposure_at_default(balances: np.array, default_month: np.array):
+    idx = get_first_truth_value(default_month)
+    return fill_static(balances[idx] if idx > 0 else None, len(default_month), False)
 
 
 @custom_feature('postdefault_recoveries', 'exposure_at_default')
-def recovery_percent(postdefault_recoveries: np.array, exposure_at_default: np.array):
-    return np.full(len(postdefault_recoveries), get_static_value(postdefault_recoveries) / get_static_value(exposure_at_default) )
+def recovery_percent(recoveries: np.array, exposures: np.array):
+    return fill_static(get_static_value(recoveries) / get_static_value(exposures), len(recoveries), False)
 
 
 @custom_feature('date_of_default', 'Date')
