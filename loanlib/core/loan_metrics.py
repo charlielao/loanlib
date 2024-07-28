@@ -32,7 +32,10 @@ class LoanMetrics:
         if self.pivots:
             raise ValueError('Cannot plot pivoted data')
         import matplotlib.pyplot as plt
-        return plt.plot(self.curve(curve_type)[curve_type.lower()])
+        plt.plot(self.curve(curve_type)[curve_type.lower()])
+        plt.ylabel(curve_type)
+        plt.xlabel(self.index)
+        return plt.show()
 
     @classmethod
     def _generate_base_metric(cls, metric_name: str, df: pd.DataFrame, index: str, pivots: List[str]):

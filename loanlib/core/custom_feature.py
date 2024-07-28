@@ -14,6 +14,9 @@ For how to create your own features, check Read.me
 for future iteration, there could be something that intercept the call and construct the computational graph automatically
 without user specifying the dependencies explicitly; also possibly don't need to specify both in arguments and in the 
 decorator but inferred from the function signature, bit tricky since some cols are not calculated 
+
+the calculation is a bit slow, might be able to leverage parallelization like with Dask since each loan is independent, 
+so they totally be calculated separately and then rejoined
 '''
 
 
