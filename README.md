@@ -30,6 +30,7 @@ loader.create_features(df)
 4. load_metrics.py provides LoanMetrics class that constructs loan metrics curves (SMM, MDR, CPR, CDR, Recovery) and provides plotting and pivot tables
 ```
 #can pass in df, or just the data source, it will automatically load data and run the create features routine
+
 from loanlib.core.loan_metrics import LoanMetrics
 
 curves = LoanMetrics(df, index='time_to_reversion', pivots=['product'])
@@ -38,8 +39,6 @@ curves.curve('SMM')
 
 curves2 = LoanMetrics(SOURCE_FILE_PATH)
 curves2.plot('CDR')
-
-
 ```
 5. model.py provides a simple implementation of the cashflow model that takes can configuration as a dictionary, to modify the model or add a row
    simply provide a pair of functions in this form, currently as there are nonvectorisable recursive functions, we use numba to iterate through functions quickly
@@ -61,8 +60,10 @@ base_curves = LoanMetrics(SOURCE_FILE_PATH, index ='time_to_reversion')
 base_cpr = base_curves.curve('CPR')
 base_cdr = base_curves.curve('CDR')
 config1 = {'cpr': base_cpr, 'cdr':base_cdr}
+
 base_cpr_2['cpr'] = base_cpr.reset_index().apply(lambda x:x['cpr'] * (2.0 if x['time_to_reversion']>=0 else 1.0 ), axis=1).values
 config2 = {'cpr': base_cpr_2, 'cdr':base_cdr}
+
 run_simulations([config1, config2])
 ```
-7. there's also a testing package that's work in progress
+7. there's also a testing cases that's work in progress
