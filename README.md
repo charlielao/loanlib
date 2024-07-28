@@ -1,4 +1,6 @@
 the library contains several pieces:
+for examples, please check the notebook folder
+
 1. data_handler.py that loads data and automatically constructs features from custom_feature.py (in a new copy)
 ```
 #load the data like this
@@ -66,4 +68,4 @@ config2 = {'cpr': base_cpr_2, 'cdr':base_cdr}
 
 run_simulations([config1, config2])
 ```
-7. there's also a testing cases that's work in progress
+7. there's also a testing cases that provides skeletons to test custom features/loan_merics/models but it's by no means complete
