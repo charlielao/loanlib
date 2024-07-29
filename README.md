@@ -53,6 +53,7 @@ curves2.plot('CDR')
 4. model.py provides a simple implementation of the cashflow model that takes can configuration as a dictionary, to modify the model or add a row
    simply provide a pair of functions in this form, currently as there are nonvectorisable recursive functions, we use numba to iterate through functions quickly
    the code below roughly translates as X[T] := Y[T] - Z[T-1] similar to excel how one column could depend on previous columns
+   if the performance doesn't matter that much, only the `def _x(self, forecast_month)` needs to be implemented for the final data frame to be constructed properly
 ```
     @lru_cache()
     def _x(self, forecast_month: int) -> float:
