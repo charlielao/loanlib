@@ -34,6 +34,7 @@ class DataLoader:
     @classmethod
     def _format_data_frame(cls, df: pd.DataFrame):
         if cls._data_frame_is_static(df):
+            #highly depends on the form of data imported, need to configure as required
             df.columns = df.iloc[1]
             df = df.iloc[2:, 1:]
             df.set_index('loan_id', inplace=True)
@@ -80,6 +81,7 @@ class DataLoader:
         all_custom_funcs = set(register.keys())
         dependency_graph = {func: {dep for dep in deps if dep in all_custom_funcs } for func, deps in register.items()}
         df.sort_index(inplace=True)
+        skipped_features = set(skipped_features)
         for func_name in TopologicalSorter(dependency_graph).static_order():
             if func_name not in skipped_features:
                 func = function_name_map[func_name]
