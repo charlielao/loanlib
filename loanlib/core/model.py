@@ -15,7 +15,7 @@ handled better
 !!!also, the _func needs to define forecast_month as a argument so that it controls where it is on the timeline
 
 should use a dynamic programming table to build up the table, but determining the order is a bit involved needs topology sort
-need to specify dependency, similar to custom_feature.py
+need to specify dependency, similar to custom_feature.py, here we use lru_cache which should be close enough
 could potentially refactored out all codes, having to specify two functions (_func and _jitted_func) for one row is a bit
 ugly 
 the numba decorator probably doesn't need to cache
