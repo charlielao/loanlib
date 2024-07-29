@@ -46,7 +46,6 @@ class MortgageCashflowModel:
         self.verify_parameters()
         self.df = self.run()
 
-
     def verify_parameters(self):
         if self.fixed_pre_reversion_rate < 0.0 or self.fixed_pre_reversion_rate > 1.0:
             raise ValueError('Fixed pre-reversion rate should be between 0 and 1')
@@ -60,25 +59,28 @@ class MortgageCashflowModel:
         #if self.input_cpr.index != self.input_cdr.index:
         #    raise ValueError('CPR and CDR indices should match')
 
-    def run(self):
+    @cached_property
+    def features(self):
         import inspect
-        df = {}
         all_attributes = frozenset(dir(self))
         relevant_attributes = []
         for name in all_attributes:
-            attr = getattr(self, name)
-            new_attr_name = name[1:]
-            # needs better way to enforce ways to build rows, too brittle currently
-            if inspect.ismethod(attr) and 'forecast_month' in inspect.signature(attr).parameters \
-                    and 'jitted' not in name and name[0] == '_' and new_attr_name not in all_attributes:
-                relevant_attributes.append((attr, new_attr_name))
+            if name != 'features':
+                attr = getattr(self, name)
+                new_attr_name = name[1:]
+                # needs better way to enforce ways to build rows, too brittle currently
+                if inspect.ismethod(attr) and 'forecast_month' in inspect.signature(attr).parameters \
+                        and 'jitted' not in name and name[0] == '_' and new_attr_name not in all_attributes:
+                    relevant_attributes.append((attr, new_attr_name))
+        return relevant_attributes
 
+    def run(self):
+        df = {}
         for forecast_month in self.forecast_months:
-            for attr, attr_name in relevant_attributes:
+            for attr, attr_name in self.features:
                 if attr_name not in df:
                     df[attr_name] = np.zeros(len(self.forecast_months))
                 df[attr_name][forecast_month-1] = attr(forecast_month)
-
         return pd.DataFrame(df)
 
     @classmethod
@@ -358,22 +360,36 @@ def run_single_simulation(loan_config_override: dict = {}):
     configuration = {**BASE_LOAN_CONFIG, **loan_config_override}
     try:
         model = MortgageCashflowModel(**configuration)
-        model.run()
-        return model.df
+        return model
     except Exception as e:
         return f'Error encountered when running simulation with config {loan_config_override}: {e}'
 
 
-def run_simulations(loan_configs: List[Dict]=[{}]):
+def run_simulations(loan_configs: List[Dict]=[{}], aggregate: bool = True) -> pd.DataFrame | List[MortgageCashflowModel]:
+    #maybe can take a config file
     import os
     from multiprocessing import Pool
     with Pool(os.cpu_count()) as p:
         results = (p.map(run_single_simulation, loan_configs))
-    return results
+    errors = []
+    if not aggregate:
+        return results
+    combined_df = None
+    for result in results:
+        # need more research to do it properly
+        if isinstance(result, str):
+            errors.append(result)
+        else:
+            if combined_df is None:
+                combined_df = result.df
+            else:
+                #need to select which columns to add, not all of them, only the cashflows
+                combined_df = combined_df.add(result.df)
+    return combined_df
 
 
 if __name__ == '__main__':
     import time
     starting_time = time.time()
-    run_simulations([{}] * int(1e4))
+    print(run_simulations([{}] * int(10000), aggregate=True))
     print(time.time() - starting_time)
