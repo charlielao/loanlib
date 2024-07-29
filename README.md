@@ -52,15 +52,16 @@ curves2.plot('CDR')
 ```
 4. model.py provides a simple implementation of the cashflow model that takes can configuration as a dictionary, to modify the model or add a row
    simply provide a pair of functions in this form, currently as there are nonvectorisable recursive functions, we use numba to iterate through functions quickly
+   the code below roughly translates as X[T] := Y[T] - Z[T-1] similar to excel how one column could depend on previous columns
 ```
     @lru_cache()
-    def _new_row(self, forecast_month: int) -> float:
-        return self._jitted_new_row(self._other_row_1(forecast_month), self._other_row_2(forecast_month))
+    def _x(self, forecast_month: int) -> float:
+        return self._jitted_x(self._y(forecast_month), self._z(forecast_month-1))
 
     @staticmethod
     @njit(cache=True)
-    def _jitted_new_row(other_row_1: float, other_row_2: float) -> float:
-        return other_row_1 - other_row_2
+    def _jitted_x(y: float, z: float) -> float:
+        return y - z
 ```
 5. lastly, to run cashflow models with run_simulations, which uses multiprocessing libraries to parallel workflow; on my laptop 10000 basic loans take about 15 seconds to simulate
 ```
