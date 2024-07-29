@@ -19,7 +19,7 @@ loader.create_features(df)
 ```
 2. creating your own features to add to the data frame is simple, there are two main ways
 
-  I. (more recommended) add numba @njit for complex recursive operations that don't cannot get vectorised easily, either wise use numpy operations 
+  I. (more recommended) add numba @njit for complex recursive operations that don't cannot get vectorised easily, either wise use numpy operations (can choose either depends on which one is more natural as the speed improvements of numba on numpy is case dependent)
 ```
     @custom_feature('input_1', 'input_2')
     @njit
